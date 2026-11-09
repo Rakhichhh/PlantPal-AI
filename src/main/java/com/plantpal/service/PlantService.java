@@ -3,6 +3,8 @@ package com.plantpal.service;
 import com.plantpal.api.PlantRequest;
 import com.plantpal.domain.*;
 import com.plantpal.pattern.builder.PlantBuilder;
+import com.plantpal.pattern.observer.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.plantpal.pattern.factory.CareTaskCreator;
 import com.plantpal.repository.*;
 import org.springframework.http.HttpStatus;
@@ -14,11 +16,22 @@ import java.util.*;
 
 @Service
 public class PlantService {
+    private final CareEventPublisher eventPublisher;
+    private final CareSettingsRepository settings;
+    private final CareNotificationRepository notifications;
     private final PlantRepository plants;
     private final CareTaskRepository tasks;
     private final Map<CareTaskType, CareTaskCreator> creators = new EnumMap<>(CareTaskType.class);
 
+    // Compatibility constructor used by Student 1's isolated unit tests.
     public PlantService(PlantRepository plants, CareTaskRepository tasks, List<CareTaskCreator> availableCreators) {
+        this(plants, tasks, availableCreators, null, null, null);
+    }
+    @Autowired
+    public PlantService(PlantRepository plants, CareTaskRepository tasks, List<CareTaskCreator> availableCreators,
+                        CareEventPublisher eventPublisher, CareSettingsRepository settings,
+                        CareNotificationRepository notifications) {
+        this.eventPublisher=eventPublisher; this.settings=settings; this.notifications=notifications;
         this.plants = plants; this.tasks = tasks;
         for (CareTaskCreator c : availableCreators) {
             if (creators.putIfAbsent(c.supportedType(), c) != null)
@@ -41,6 +54,7 @@ public class PlantService {
         Plant saved = plants.save(plant);
         LocalDate today = LocalDate.now();
         for (CareTaskCreator creator : creators.values()) tasks.save(creator.schedule(saved, today));
+        emit(CareEventType.PLANT_CREATED, saved.getId());
         return saved;
     }
     @Transactional
@@ -52,12 +66,16 @@ public class PlantService {
                 .notes(r.notes()).photoUrl(r.photoUrl()).build();
         existing.update(validated.getNickname(),validated.getSpecies(),validated.getRoom(),
                 validated.getLightLevel(),validated.getWateringIntervalDays(),validated.getNotes(), validated.getPhotoUrl());
-        return plants.save(existing);
+        Plant updated = plants.save(existing);
+        emit(CareEventType.PLANT_UPDATED, id);
+        return updated;
     }
     @Transactional
     public void delete(Long id) {
         get(id);
         tasks.deleteByPlantId(id);
+        if (settings != null) settings.deleteById(id);
+        if (notifications != null) notifications.deleteByPlantId(id);
         plants.deleteById(id);
     }
     @Transactional(readOnly = true)
@@ -67,7 +85,15 @@ public class PlantService {
     @Transactional
     public CareTask completeTask(Long id, boolean completed) {
         CareTask t = tasks.findById(id).orElseThrow(() -> missing("Task",id));
-        t.setCompleted(completed); return tasks.save(t);
+        boolean wasCompleted=t.isCompleted();
+        t.setCompleted(completed);
+        CareTask saved=tasks.save(t);
+        if (!wasCompleted && completed && t.getType()==CareTaskType.SOIL_CHECK)
+            emit(CareEventType.SOIL_CHECK_COMPLETED,t.getPlant().getId());
+        return saved;
+    }
+    private void emit(CareEventType type,Long plantId) {
+        if(eventPublisher!=null && plantId!=null)eventPublisher.publish(new CareEvent(type,plantId));
     }
     private ResponseStatusException missing(String type, Long id) {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " " + id + " not found");
