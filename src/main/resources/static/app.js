@@ -1,24 +1,134 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PlantPal AI | My Plants</title><link rel="stylesheet" href="styles.css"></head>
-<body><div class="layout"><aside><div class="logo">✿ <b>PlantPal</b><span>AI</span></div><div class="nav-title">WORKSPACE</div><a class="nav active" href="#plants">◫ &nbsp; My Plants</a><a class="nav" href="#schedule">▦ &nbsp; Care Schedule</a><a class="nav" href="#analytics">▤ &nbsp; Analytics</a><div class="side-note"><b>Students 1–4 integration</b><p>Builder, Factory Method, Strategy and Observer are implemented in Java.</p></div></aside>
-<main><header><div><div class="eyebrow">YOUR BOTANICAL WORKSPACE</div><h1>Grow something good.</h1><p class="muted">Organize your plants and create care tasks in one place.</p></div><button id="addBtn" class="primary">+ Add plant</button></header>
-<section id="banner" class="banner">🌿 <span><b>Your indoor garden, simplified.</b><br><small>Every new plant gets a soil-check, inspection and fertilizer-review task.</small></span></section>
-<section id="aiScan" class="ai-panel"><div class="section-title"><h2>✨ Identify plant with Gemini</h2><span class="muted">Student 3 · Adapter Pattern</span></div>
-<p class="muted">Upload a JPG or PNG (up to 5 MB). AI suggestions must be checked before saving. Your API key stays on the backend.</p>
-<div class="scan-row"><label for="plantPhoto">Plant photo</label><input id="plantPhoto" type="file" accept="image/jpeg,image/png"><button type="button" class="primary" id="scanBtn">Analyze with AI</button></div>
-<div id="scanOutput" class="scan-output" role="status" aria-live="polite">No photo analyzed yet. You can always add plants manually.</div></section>
-<section id="plants"><div class="section-title"><h2>My plants <span id="count">0</span></h2><label><span class="sr">Search plants</span><input id="search" placeholder="Search your plants..."></label></div><div id="plantsGrid" class="grid"></div></section>
-<section id="schedule"><div class="section-title"><h2>Care schedule</h2><span class="muted">Generated using Factory Method and Strategy</span></div><div id="taskList" class="task-list"></div></section>
-<section id="planning"><div class="section-title"><h2>Smart planning</h2><span class="muted">Student 2 · Strategy + Observer</span></div>
-<div class="planning-card"><label for="planningPlant">Choose plant</label><select id="planningPlant"></select>
-<label for="careMode">Care strategy</label><select id="careMode"><option value="STANDARD">Standard: normal check interval</option><option value="CONSERVATIVE">Conservative: check soil more often</option></select>
-<button type="button" id="applyMode" class="primary">Apply strategy</button><p id="planningStatus" class="muted" role="status"></p></div>
-<div class="section-title"><h2>Activity notifications</h2><button type="button" id="refreshNotifications" class="secondary">Refresh</button></div><div id="notificationList" class="task-list"></div></section>
-<section id="analytics"><div class="section-title"><h2>Care Analytics</h2><span class="muted">Student 4 · Facade + Visitor</span></div>
-<div class="stats-grid"><div class="stat-card"><b id="statPlants">—</b><small>Plants</small></div><div class="stat-card"><b id="statTasks">—</b><small>Care tasks</small></div><div class="stat-card"><b id="statCompleted">—</b><small>Completed</small></div><div class="stat-card"><b id="statOverdue">—</b><small>Overdue</small></div><div class="stat-card"><b id="statPercent">—</b><small>Completion</small></div></div>
-<div class="analytics-actions"><button class="secondary" id="refreshAnalytics" type="button">Refresh analytics</button><a class="primary export-link" href="/api/workflows/report.csv" download>Export care report (CSV)</a></div>
-<p class="muted">Visitor gathers statistics from plants, care tasks, and notifications. Facade coordinates workflow and reports.</p></section>
-<footer>PlantPal AI · Students 1–4 integrated demo</footer>
-</main></div>
-<dialog id="editor"><form id="plantForm"><div class="dialog-top"><div><div class="eyebrow">PLANT PROFILE</div><h2 id="formTitle">Add a new plant</h2></div><button class="close" type="button" id="closeBtn" aria-label="Close">×</button></div><div class="fields"><label>Nickname <input required maxlength="80" name="nickname" placeholder="e.g. My Monstera"></label><label>Species <input required maxlength="120" name="species" placeholder="e.g. Monstera deliciosa"></label><label>Room <input required maxlength="80" name="room" placeholder="e.g. Living Room"></label><label>Light level <select name="lightLevel"><option value="INDIRECT">Indirect sunlight</option><option value="LOW">Low light</option><option value="BRIGHT">Bright light</option></select></label><label>Soil check interval (days) <input type="number" required min="1" max="90" name="wateringIntervalDays" value="7"></label><label>Photo URL (optional) <input name="photoUrl" maxlength="500" placeholder="https://..."></label><label class="wide">Notes <textarea name="notes" maxlength="500" rows="3" placeholder="Care instructions..."></textarea></label></div><p id="formError" class="error" role="alert"></p><div class="actions"><button type="button" id="cancelBtn" class="secondary">Cancel</button><button type="submit" class="primary" id="saveBtn">Save plant</button></div></form></dialog>
-<div id="toast" role="status" aria-live="polite"></div><script src="app.js"></script></body></html>
+const $ = (selector) => document.querySelector(selector);
+const grid = $('#plantsGrid'), tasksEl = $('#taskList'), form = $('#plantForm'), dialog = $('#editor');
+let plants = [], tasks = [], editingId = null;
+
+async function api(path, options = {}) {
+  const response = await fetch('/api' + path, { ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers } });
+  if (response.status === 204) return null;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return data;
+}
+function notify(message) { const el = $('#toast'); el.textContent = message; el.style.display = 'block'; clearTimeout(notify.timer); notify.timer = setTimeout(() => el.style.display='none', 3200); }
+function text(tag, value, className) { const element = document.createElement(tag); element.textContent = value ?? ''; if (className) element.className = className; return element; }
+function photoIsSafe(url) { if (/^\/api\/plant-photos\/[a-f0-9-]{36}\.(jpg|png)$/i.test(url)) return true; try { const u = new URL(url); return ['https:', 'http:'].includes(u.protocol); } catch { return false; } }
+function createCard(plant) {
+  const card = text('article', '', 'plant-card');
+  const visual = text('div', '🌿', 'plant-visual');
+  if (plant.photoUrl && photoIsSafe(plant.photoUrl)) {
+    const img = document.createElement('img'); img.src = plant.photoUrl; img.alt = plant.nickname; img.onerror = () => { visual.replaceChildren(document.createTextNode('🌿')); }; visual.replaceChildren(img);
+  }
+  card.append(visual);
+  const info = text('div','','plant-info'); info.append(text('h3',plant.nickname),text('p',plant.species + ' · ' + plant.room),text('span',plant.lightLevel.toLowerCase() + ' light','pill'));
+  const actions = text('div','','card-actions');
+  const edit = text('button','Edit'); edit.onclick = () => openEditor(plant);
+  const remove = text('button','Delete','danger'); remove.onclick = () => deletePlant(plant.id);
+  actions.append(edit,remove);info.append(actions);card.append(info);return card;
+}
+function render() {
+  const query = $('#search').value.trim().toLowerCase();
+  const filtered = plants.filter(p => [p.nickname,p.species,p.room].some(v => v.toLowerCase().includes(query)));
+  grid.replaceChildren(...filtered.map(createCard));
+  if (!filtered.length) grid.append(text('div','No plants found. Add one to get started!','empty'));
+  $('#count').textContent = plants.length;
+  tasksEl.replaceChildren(...tasks.map(t => {
+    const item = text('div','','task' + (t.completed ? ' done' : ''));
+    const checkbox = document.createElement('input'); checkbox.type='checkbox'; checkbox.checked = t.completed; checkbox.setAttribute('aria-label',`Complete ${t.title}`);
+    checkbox.onchange = async () => { try { if(checkbox.checked) await api(`/workflows/tasks/${t.id}/complete`,{method:'PATCH'}); else await api(`/tasks/${t.id}/completion`,{method:'PATCH',body:JSON.stringify({completed:false})}); await load(); notify('Care task updated'); } catch(e) { checkbox.checked=!checkbox.checked; notify(e.message); } };
+    const plant = plants.find(p => p.id === t.plantId);
+    const info = text('div','','info'); info.append(text('b',t.title),text('small',plant ? plant.nickname : 'Plant'));
+    item.append(checkbox,info,text('span',t.dueDate,'date')); return item;
+  }));
+  if (!tasks.length) tasksEl.append(text('div','No care tasks yet.','empty'));
+  const selector=$('#planningPlant');
+  const selected=selector.value;
+  selector.replaceChildren(...plants.map(p=>{let o=document.createElement('option');o.value=p.id;o.textContent=p.nickname;return o;}));
+  if(plants.some(p=>String(p.id)===selected))selector.value=selected;
+  if(selector.value)loadSettings().catch(e=>notify(e.message));
+}
+async function load() { try { [plants,tasks] = await Promise.all([api('/plants'),api('/tasks')]); render(); await loadNotifications(); await loadAnalytics(); } catch(e) { notify('Could not load data: '+e.message); } }
+function openEditor(plant = null) {
+  editingId = plant?.id ?? null; form.reset(); $('#formError').textContent='';
+  $('#formTitle').textContent = plant ? 'Edit plant' : 'Add a new plant';
+  if (plant) for (const key of ['nickname','species','room','lightLevel','wateringIntervalDays','notes','photoUrl']) form.elements[key].value=plant[key] ?? '';
+  dialog.showModal();
+}
+async function deletePlant(id) {
+  if (!confirm('Delete this plant and its care tasks?')) return;
+  try { await api(`/plants/${id}`, {method:'DELETE'}); await load(); notify('Plant deleted'); } catch(e) { notify(e.message); }
+}
+form.addEventListener('submit', async event => {
+  event.preventDefault(); $('#formError').textContent='';
+  const values = Object.fromEntries(new FormData(form).entries()); values.wateringIntervalDays=Number(values.wateringIntervalDays);
+  if (values.photoUrl && !photoIsSafe(values.photoUrl)) { $('#formError').textContent='Photo URL must start with https:// or http://'; return; }
+  $('#saveBtn').disabled=true;
+  try { await api(editingId ? `/plants/${editingId}` : '/workflows/plants',{method:editingId?'PUT':'POST',body:JSON.stringify(values)}); dialog.close();await load();notify(editingId?'Plant updated':'Plant added with care tasks'); }
+  catch(e) { $('#formError').textContent=e.message; }
+  finally { $('#saveBtn').disabled=false; }
+});
+$('#addBtn').onclick=()=>openEditor(); $('#closeBtn').onclick=()=>dialog.close();$('#cancelBtn').onclick=()=>dialog.close();$('#search').oninput=render;
+load();
+
+// Student 2: live Strategy selection and Observer-generated events.
+async function loadSettings(){
+  const id=$('#planningPlant').value;if(!id)return;
+  const settings=await api(`/plants/${id}/care-settings`);
+  $('#careMode').value=settings.mode;
+}
+async function loadNotifications(){
+  const entries=await api('/notifications');const list=$('#notificationList');
+  list.replaceChildren(...entries.map(n=>{
+    const row=text('div','','task');
+    const plant=plants.find(p=>p.id===n.plantId);
+    const info=text('div','','info');info.append(text('b',n.message),text('small',`${plant?.nickname??'Plant'} · ${new Date(n.createdAt).toLocaleString()}`));
+    row.append(info);
+    if(!n.read){const btn=text('button','Mark read','secondary');btn.onclick=async()=>{try{await api(`/notifications/${n.id}/read`,{method:'PATCH'});await loadNotifications();}catch(e){notify(e.message);}};row.append(btn);}
+    return row;
+  }));
+  if(!entries.length)list.append(text('div','No notifications yet','empty'));
+}
+$('#planningPlant').onchange=()=>loadSettings().catch(e=>notify(e.message));
+$('#applyMode').onclick=async()=>{
+  const id=$('#planningPlant').value;if(!id)return notify('Add a plant first');
+  try{
+    await api(`/workflows/plants/${id}/care-mode`,{method:'PUT',body:JSON.stringify({mode:$('#careMode').value})});
+    $('#planningStatus').textContent='Schedule recalculated. New event notification created.';
+    await load();await loadNotifications();notify('Care strategy applied');
+  }catch(e){notify(e.message);}
+};
+$('#refreshAnalytics').onclick=()=>loadAnalytics().catch(e=>notify(e.message));
+async function loadAnalytics(){const r=await api('/workflows/summary'); $('#statPlants').textContent=r.plants;$('#statTasks').textContent=r.tasks;$('#statCompleted').textContent=r.completedTasks;$('#statOverdue').textContent=r.overdueTasks;$('#statPercent').textContent=r.completionRatePercent+'%';}
+$('#refreshNotifications').onclick=()=>loadNotifications().catch(e=>notify(e.message));
+loadNotifications().catch(e=>notify(e.message));
+
+// Student 3: Multipart upload -> Spring controller -> GeminiPlantAdapter -> suggested Plant data.
+$('#scanBtn').onclick=async()=>{
+ const file=$('#plantPhoto').files[0], output=$('#scanOutput');
+ if(!file)return notify('Choose a JPG or PNG photo');
+ if(file.size>5*1024*1024)return notify('Photo exceeds 5 MB');
+ if(!['image/jpeg','image/png'].includes(file.type))return notify('Only JPG/PNG supported');
+ $('#scanBtn').disabled=true;output.textContent='Analyzing photo with Gemini…';
+ try{
+  const body=new FormData();body.append('photo',file);
+  const res=await fetch('/api/plants/analyze',{method:'POST',body});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.error||data.detail||data.message||`AI request failed (${res.status})`);
+  const a=data.analysis;
+  output.replaceChildren();
+  const description=text('div',`${a.commonName} · ${a.scientificName} · ${a.identificationStatus}`,'ai-result');
+  const notes=text('p',a.careSummary||'No additional notes');
+  const action=text('button','Review and add plant','primary');
+  action.onclick=()=>{
+   openEditor();form.elements.nickname.value=a.commonName;
+   form.elements.species.value=a.scientificName;
+   form.elements.lightLevel.value=a.lightLevel;
+   form.elements.wateringIntervalDays.value=a.soilCheckDays;
+   form.elements.notes.value=a.careSummary;
+   form.elements.photoUrl.value=data.photoUrl;
+   notify('Check the AI suggestion and fill in a room before saving');
+  };
+  output.append(description,notes,action);
+ }catch(error){output.textContent='AI could not analyze this photo: '+error.message+' Manual plant creation is still available.';}
+ finally{$('#scanBtn').disabled=false;}
+};

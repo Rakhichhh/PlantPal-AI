@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
-class ObserverStrategyPatternsTest {
+class Student2PatternsTest {
  private final Plant plant=new PlantBuilder().nickname("Monstera").species("Monstera deliciosa")
   .room("Living Room").wateringIntervalDays(7).build();
  @Test void standardUsesConfiguredInterval(){

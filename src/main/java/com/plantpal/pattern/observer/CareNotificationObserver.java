@@ -23,7 +23,7 @@ public class CareNotificationObserver implements CareObserver {
   var plant=plants.findById(event.plantId());
   if(plant.isPresent())decorated=new PlantNameDecorator(decorated,plant.get().getNickname());
   if(event.type()==CareEventType.SOIL_CHECK_COMPLETED)
-   decorated=new CareTipDecorator(decorated,"Check soil moisture before watering");
+    decorated=new CareTipDecorator(decorated,"Check soil moisture before watering");
   notifications.save(new CareNotification(event.plantId(),decorated.render(),Instant.now()));
  }
 }
