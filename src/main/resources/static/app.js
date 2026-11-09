@@ -12,7 +12,7 @@ async function api(path, options = {}) {
 }
 function notify(message) { const el = $('#toast'); el.textContent = message; el.style.display = 'block'; clearTimeout(notify.timer); notify.timer = setTimeout(() => el.style.display='none', 3200); }
 function text(tag, value, className) { const element = document.createElement(tag); element.textContent = value ?? ''; if (className) element.className = className; return element; }
-function photoIsSafe(url) { try { const u = new URL(url); return ['https:', 'http:'].includes(u.protocol); } catch { return false; } }
+function photoIsSafe(url) { if (/^\/api\/plant-photos\/[a-f0-9-]{36}\.(jpg|png)$/i.test(url)) return true; try { const u = new URL(url); return ['https:', 'http:'].includes(u.protocol); } catch { return false; } }
 function createCard(plant) {
   const card = text('article', '', 'plant-card');
   const visual = text('div', '🌿', 'plant-visual');
@@ -99,3 +99,34 @@ $('#applyMode').onclick=async()=>{
 };
 $('#refreshNotifications').onclick=()=>loadNotifications().catch(e=>notify(e.message));
 loadNotifications().catch(e=>notify(e.message));
+
+// Student 3: Multipart upload -> Spring controller -> GeminiPlantAdapter -> suggested Plant data.
+$('#scanBtn').onclick=async()=>{
+ const file=$('#plantPhoto').files[0], output=$('#scanOutput');
+ if(!file)return notify('Choose a JPG or PNG photo');
+ if(file.size>5*1024*1024)return notify('Photo exceeds 5 MB');
+ if(!['image/jpeg','image/png'].includes(file.type))return notify('Only JPG/PNG supported');
+ $('#scanBtn').disabled=true;output.textContent='Analyzing photo with Gemini…';
+ try{
+  const body=new FormData();body.append('photo',file);
+  const res=await fetch('/api/plants/analyze',{method:'POST',body});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.error||data.detail||data.message||`AI request failed (${res.status})`);
+  const a=data.analysis;
+  output.replaceChildren();
+  const description=text('div',`${a.commonName} · ${a.scientificName} · ${a.identificationStatus}`,'ai-result');
+  const notes=text('p',a.careSummary||'No additional notes');
+  const action=text('button','Review and add plant','primary');
+  action.onclick=()=>{
+   openEditor();form.elements.nickname.value=a.commonName;
+   form.elements.species.value=a.scientificName;
+   form.elements.lightLevel.value=a.lightLevel;
+   form.elements.wateringIntervalDays.value=a.soilCheckDays;
+   form.elements.notes.value=a.careSummary;
+   form.elements.photoUrl.value=data.photoUrl;
+   notify('Check the AI suggestion and fill in a room before saving');
+  };
+  output.append(description,notes,action);
+ }catch(error){output.textContent='AI could not analyze this photo: '+error.message+' Manual plant creation is still available.';}
+ finally{$('#scanBtn').disabled=false;}
+};
