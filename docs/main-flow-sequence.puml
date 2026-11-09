@@ -1,0 +1,21 @@
+@startuml
+actor User
+participant "Web UI" as UI
+participant "WorkflowController" as C
+participant "PlantCareFacade" as F
+participant "PlantService" as S
+participant "Builder + Factories" as P
+database "H2 DB" as DB
+User -> UI: Enter plant details / Save
+UI -> C: POST /api/workflows/plants
+C -> F: registerPlant(request)
+F -> S: add(request)
+S -> P: build plant + create tasks
+P --> S: Plant + CareTasks
+S -> DB: save plant and tasks
+DB --> S: persisted data
+S --> F: Plant
+F --> C: Plant
+C --> UI: 201 Created
+UI --> User: Plant card and tasks
+@enduml

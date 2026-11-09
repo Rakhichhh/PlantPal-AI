@@ -3,3 +3,10 @@
 .planning-card{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:#fff;border:1px solid #dce5dc;border-radius:18px;padding:20px;margin-bottom:28px}.planning-card label{font-weight:600}.planning-card select{min-width:180px;max-width:100%;border:1px solid #dce5dc;padding:10px;border-radius:10px}.planning-card p{width:100%;margin:0}@media(max-width:650px){.planning-card{flex-direction:column;align-items:stretch}}
 
 .ai-panel{background:#fff;border:1px solid #d6e6d8;border-radius:18px;padding:20px;margin:0 0 38px;box-shadow:0 8px 24px #16442c08}.ai-panel .section-title{margin:0 0 12px}.scan-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.scan-row input{max-width:300px}.scan-output{padding:16px;background:#f3f8f2;border-radius:12px;margin-top:15px;color:#426c50;line-height:1.6}.ai-result{font-weight:750;color:#246449}
+
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:18px 0}
+.stat-card{display:flex;flex-direction:column;gap:8px;padding:18px;border-radius:14px;border:1px solid #dce6df;background:#f8fcf8}
+.stat-card b{font-size:28px;color:#286342}.stat-card small{color:#68766c}
+.analytics-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.export-link{text-decoration:none;padding:11px 16px;border-radius:10px;display:inline-block}
