@@ -1,0 +1,30 @@
+@startuml
+skinparam classAttributeIconSize 0
+interface CareReportElement { +accept(visitor) }
+interface CareReportVisitor {
+  +visit(PlantReportEntry)
+  +visit(TaskReportEntry)
+  +visit(NotificationReportEntry)
+}
+class PlantReportEntry
+class TaskReportEntry
+class NotificationReportEntry
+class CareStatisticsVisitor
+class CareSummary
+class PlantCareFacade
+class PlantService
+class CarePlanningService
+class CareReportExportService
+CareReportElement <|.. PlantReportEntry
+CareReportElement <|.. TaskReportEntry
+CareReportElement <|.. NotificationReportEntry
+CareReportVisitor <|.. CareStatisticsVisitor
+PlantReportEntry ..> CareReportVisitor : accept
+TaskReportEntry ..> CareReportVisitor : accept
+NotificationReportEntry ..> CareReportVisitor : accept
+CareStatisticsVisitor --> CareSummary
+PlantCareFacade --> PlantService
+PlantCareFacade --> CarePlanningService
+PlantCareFacade ..> CareStatisticsVisitor
+CareReportExportService --> PlantCareFacade
+@enduml
