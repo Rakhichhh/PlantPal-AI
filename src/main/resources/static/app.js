@@ -41,8 +41,13 @@ function render() {
     item.append(checkbox,info,text('span',t.dueDate,'date')); return item;
   }));
   if (!tasks.length) tasksEl.append(text('div','No care tasks yet.','empty'));
+  const selector=$('#planningPlant');
+  const selected=selector.value;
+  selector.replaceChildren(...plants.map(p=>{let o=document.createElement('option');o.value=p.id;o.textContent=p.nickname;return o;}));
+  if(plants.some(p=>String(p.id)===selected))selector.value=selected;
+  if(selector.value)loadSettings().catch(e=>notify(e.message));
 }
-async function load() { try { [plants,tasks] = await Promise.all([api('/plants'),api('/tasks')]); render(); } catch(e) { notify('Could not load data: '+e.message); } }
+async function load() { try { [plants,tasks] = await Promise.all([api('/plants'),api('/tasks')]); render(); await loadNotifications(); } catch(e) { notify('Could not load data: '+e.message); } }
 function openEditor(plant = null) {
   editingId = plant?.id ?? null; form.reset(); $('#formError').textContent='';
   $('#formTitle').textContent = plant ? 'Edit plant' : 'Add a new plant';
@@ -64,3 +69,33 @@ form.addEventListener('submit', async event => {
 });
 $('#addBtn').onclick=()=>openEditor(); $('#closeBtn').onclick=()=>dialog.close();$('#cancelBtn').onclick=()=>dialog.close();$('#search').oninput=render;
 load();
+
+// Student 2: live Strategy selection and Observer-generated events.
+async function loadSettings(){
+  const id=$('#planningPlant').value;if(!id)return;
+  const settings=await api(`/plants/${id}/care-settings`);
+  $('#careMode').value=settings.mode;
+}
+async function loadNotifications(){
+  const entries=await api('/notifications');const list=$('#notificationList');
+  list.replaceChildren(...entries.map(n=>{
+    const row=text('div','','task');
+    const plant=plants.find(p=>p.id===n.plantId);
+    const info=text('div','','info');info.append(text('b',n.message),text('small',`${plant?.nickname??'Plant'} · ${new Date(n.createdAt).toLocaleString()}`));
+    row.append(info);
+    if(!n.read){const btn=text('button','Mark read','secondary');btn.onclick=async()=>{try{await api(`/notifications/${n.id}/read`,{method:'PATCH'});await loadNotifications();}catch(e){notify(e.message);}};row.append(btn);}
+    return row;
+  }));
+  if(!entries.length)list.append(text('div','No notifications yet','empty'));
+}
+$('#planningPlant').onchange=()=>loadSettings().catch(e=>notify(e.message));
+$('#applyMode').onclick=async()=>{
+  const id=$('#planningPlant').value;if(!id)return notify('Add a plant first');
+  try{
+    await api(`/plants/${id}/care-settings`,{method:'PUT',body:JSON.stringify({mode:$('#careMode').value})});
+    $('#planningStatus').textContent='Schedule recalculated. New event notification created.';
+    await load();await loadNotifications();notify('Care strategy applied');
+  }catch(e){notify(e.message);}
+};
+$('#refreshNotifications').onclick=()=>loadNotifications().catch(e=>notify(e.message));
+loadNotifications().catch(e=>notify(e.message));

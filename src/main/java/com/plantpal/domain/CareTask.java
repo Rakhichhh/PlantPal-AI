@@ -26,4 +26,8 @@ public class CareTask {
     public LocalDate getDueDate() { return dueDate; }
     public boolean isCompleted() { return completed; }
     public void setCompleted(boolean completed) { this.completed = completed; }
+    public void setDueDate(LocalDate dueDate) {
+        if (dueDate == null) throw new IllegalArgumentException("Due date required");
+        this.dueDate = dueDate;
+    }
 }
